@@ -14,10 +14,11 @@ object LocalStream {
     val AIV_TABLE: String = "AIV"
     val SINGLE_APP: String = "SINGLE_APP"
     val APP_VERSION: String = "APP_VERSION"
+    val APP_USAGE: String = "APP_USAGE"
 
     ssc.checkpoint("hdfs://master:8020/checkpoint")
 
-    val input = ssc.socketTextStream("localhost", 9999)
+    val input = ssc.socketTextStream("master", 9999)
 
     //源数据DataBean还原 从Json转化为scala对象
     val data = input.flatMap(Json.parse(_).asOpt[DataBean])
@@ -28,12 +29,10 @@ object LocalStream {
     val AIV = data.window(Seconds(20), Seconds(20))
 
     //将数据按不同日期分类
-    /*val DateSplitAIV = AIV.transform(rdd => rdd.groupBy(_.date))
+    val DateSplitAIV = AIV.transform(rdd => rdd.groupBy(_.date))
 
     DateSplitAIV.foreachRDD { rdd =>
-      val data = rdd.toLocalIterator
-
-      data.foreach { aiv =>
+      rdd.foreach { aiv =>
         val SourceData = HbaseBean.getOneRecord(AIV_TABLE, aiv._1)
 
         //----------------------统计品牌量----------------------
@@ -71,7 +70,7 @@ object LocalStream {
         //---------------------统计运营商类型---------------------
       }
 
-    }*/
+    }
 
     /** ********************计算单一应用量 *************************/
 
@@ -143,7 +142,46 @@ object LocalStream {
       }
     }
 
+    // --------------------------统计app用户使用时长--------------------------------
 
+    // 单一用户某日各app的使用时长 时间单位 秒
+    // [date: 2018-3-10, [package_name: xx, time: 1500s]]
+    val SINGLE_USER_APP_USAGE = data.map(x => (x.date, x.apps.groupBy(_.package_name) map { case (k, v) => (k, v.map(y => (y.endTime - y.beginTime) / 1000).sum) }))
+
+    // [date: 2018-3-10, [package_name: xx, time: "0-5分钟"]]  这里用1表示0 - 5分钟 2 表示 5 - 15 分钟
+    val SINGLE_USER_APP_USAGE_TRANSFORMED = SINGLE_USER_APP_USAGE.map(x => (x._1, x._2.map {
+      case (k, v) if v >= 0 && v < 300 => (k, "1")
+      case (k, v) if v >= 300 && v < 900 => (k, "2")
+      case (k, v) if v >= 900 && v < 1800 => (k, "3")
+      case (k, v) if v >= 1800 && v < 3600 => (k, "4")
+      case (k, v) if v >= 3600 && v < 7200 => (k, "5")
+      case (k, _) => (k, "6")
+    }))
+
+    // 所有app 各天的用户使用时长分布
+    // [package_name: xx, [time: "0-5分钟", [2018-3-10, 30人]]]
+    val ALL_USER_APP_USAGE = SINGLE_USER_APP_USAGE_TRANSFORMED.flatMap(x => x._2.map(y => (y._1, y._2, x._1))).transform(_.groupBy(_._1)).map {
+      case (k, v) => (k, v.groupBy(_._2).map {
+        case (kk, vv) => (kk, vv.map(z => (z._3, 1)).groupBy(_._1).map {
+          case (kkk, vvv) => (kkk, vvv.map(_._2).sum)
+        })
+      })
+    }
+
+    // 写入单一APP使用时长情况分布到Hbase
+    ALL_USER_APP_USAGE.foreachRDD { rdd =>
+      rdd.foreach { app =>
+        val oldSource = HbaseBean.getOneRecord(APP_USAGE, app._1)
+        app._2.foreach { time =>
+          val oldClickMap = scala.collection.mutable.HashMap[String, Int]()
+          Option(oldSource.getFamilyMap(time._1.getBytes)).foreach(_ forEach ((k, v) => oldClickMap += ((new String(k), new String(v).toInt))))
+          val oldClickData = oldClickMap.toMap
+          HbaseBean.insertBatchRecord(APP_USAGE, app._1, time._1, oldClickData./:(time._2) {
+            case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+          } mapValues (_.toString))
+        }
+      }
+    }
 
     ssc.start
     ssc.awaitTermination

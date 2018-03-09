@@ -90,9 +90,10 @@ object HbaseBean {
     //createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
     //createTable("SINGLE_APP", "click_num", "app_version")
     //createTable("APP_VERSION", "click_num")
+    //createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
     //dropTable("Test")
     //dropTable("SINGLE_APP")
     //dropTable("APP_VERSION")
-    getAll("APP_VERSION")
+    getAll("APP_USAGE")
   }
 }

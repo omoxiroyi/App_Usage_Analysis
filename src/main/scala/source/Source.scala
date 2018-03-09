@@ -127,7 +127,7 @@ object Source {
 
     while (current < endTime) {
       val ifUse = Random.nextInt(3)
-      val randTime = Random.nextInt(1800000) + 5000
+      val randTime = Random.nextInt(3000000) + 5000
       if (ifUse == 0) {
         val rand = Random.nextInt(cnt) + 1
         val app = weight.find(_._3 >= rand).map(x => Apps(x._1, x._2)).get
