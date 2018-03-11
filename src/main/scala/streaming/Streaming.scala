@@ -17,7 +17,7 @@ object Streaming extends App {
   val topics = Set("ttt")
 
   val kafkaParams = Map[String, Object](
-    "bootstrap.servers" -> "10.0.0.26:9092,10.0.0.33:9092",
+    "bootstrap.servers" -> "10.0.0.26:9092,10.0.0.30:9092",
     "key.deserializer" -> classOf[StringDeserializer],
     "value.deserializer" -> classOf[StringDeserializer],
     "group.id" -> "test_stream",

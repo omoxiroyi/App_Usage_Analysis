@@ -27,6 +27,7 @@ object Source {
 
     val serverSocket = new ServerSocket(9999)
     val socket = serverSocket.accept
+    println("连接成功")
     val out = new PrintWriter(socket.getOutputStream)
 
     while (true) {
