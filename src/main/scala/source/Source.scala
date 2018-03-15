@@ -21,9 +21,11 @@ object Source {
     val systemVersions = SQL("select * from system_version").as(systemVersionSample *)
     val languages = SQL("select * from language").as(languageSample *)
     val ids = SQL("select * from user_id").as(scalar[String] *)
+    val ISPs = SQL("select * from ISP").as(ISPSample *)
+    val resolutions = SQL("select * from resolution").as(ResolutionSample *)
+    val net_status = SQL("select * from net_status").as(NetStatusSample *)
     val today = Calendar.getInstance
     val formatter = new SimpleDateFormat("yyyy-MM-dd")
-    val date = formatter.format(today.getTime)
 
     val serverSocket = new ServerSocket(9999)
     val socket = serverSocket.accept
@@ -31,14 +33,46 @@ object Source {
     val out = new PrintWriter(socket.getOutputStream)
 
     while (true) {
+      val date = formatter.format(today.getTime)
+      today.add(Calendar.DAY_OF_MONTH, -1)
       1 to 100 foreach { _ =>
         val brand_model = getRandomBrand(brands)
-        val data = DataBean(getRandomUID(ids), date, getRandomAppUsage(apps), brand_model._1, brand_model._2, getRandomLanguage(languages), getRandomSystemVersion(systemVersions))
+        val data = DataBean(getRandomUID(ids), date, getRandomAppUsage(apps), brand_model._1, brand_model._2, getRandomLanguage(languages), getRandomSystemVersion(systemVersions), getRandomResolution(resolutions), getRandomNetStatus(net_status), getRandomISP(ISPs))
         out.println(Json.toJson(data))
       }
       out.flush()
       Thread.sleep(1000) //*5
     }
+  }
+
+  def getRandomISP(ISPs: List[ISP]): String = {
+    var cnt = 0
+    val weight = ISPs.map { x =>
+      cnt = cnt + x.count
+      (x.name, cnt)
+    }
+    val rand = Random.nextInt(cnt) + 1
+    weight.find(_._2 >= rand).map(_._1).get
+  }
+
+  def getRandomNetStatus(NetStatus: List[NetStatus]): String = {
+    var cnt = 0
+    val weight = NetStatus.map { x =>
+      cnt = cnt + x.count
+      (x.name, cnt)
+    }
+    val rand = Random.nextInt(cnt) + 1
+    weight.find(_._2 >= rand).map(_._1).get
+  }
+
+  def getRandomResolution(resolutions: List[(Resolution)]): String = {
+    var cnt = 0
+    val weight = resolutions.map { x =>
+      cnt = cnt + x.count
+      (x.resolution, cnt)
+    }
+    val rand = Random.nextInt(cnt) + 1
+    weight.find(_._2 >= rand).map(_._1).get
   }
 
   def getRandomBrand(brands: List[BrandModel]): (String, String) = {

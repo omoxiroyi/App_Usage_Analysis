@@ -10,13 +10,14 @@ import streaming.Util._
 
 object LocalStream {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LocalStream")
+    val conf = new SparkConf().setAppName("LocalStream").setMaster("local[8]")
     val ssc = new StreamingContext(conf, Seconds(5))
 
     val AIV_TABLE: String = "AIV"
     val SINGLE_APP: String = "SINGLE_APP"
     val APP_VERSION: String = "APP_VERSION"
     val APP_USAGE: String = "APP_USAGE"
+    val USER: String = "USER"
 
     ssc.checkpoint("hdfs://master:8020/checkpoint")
 
@@ -36,7 +37,7 @@ object LocalStream {
     DateSplitAIV.foreachRDD { rdd =>
       rdd.foreach { aiv =>
         val SourceData = HbaseBean.getOneRecord(AIV_TABLE, aiv._1)
-
+        // 待优化 可以用一个PUT直接上传一条数据
         //----------------------统计品牌量----------------------
         val oldBrandMap = scala.collection.mutable.HashMap[String, Int]()
         Option(SourceData.getFamilyMap("brand".getBytes)).foreach(_ forEach ((k, v) => oldBrandMap += ((new String(k), new String(v).toInt))))
@@ -67,9 +68,29 @@ object LocalStream {
         } mapValues (_.toString))
 
         //----------------------统计分辨率量----------------------
+        val oldResolutionMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(SourceData.getFamilyMap("resolution".getBytes)).foreach(_ forEach ((k, v) => oldResolutionMap += ((new String(k), new String(v).toInt))))
+        val oldResolutionDate = oldResolutionMap.toMap
+        val newResolutionData = aiv._2.map(x => (x.resolution, 1)).groupBy(_._1).map { case (k, v) => (k, v.map(_._2).sum) }
+        HbaseBean.insertBatchRecord(AIV_TABLE, aiv._1, "resolution", oldResolutionDate./:(newResolutionData) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        } mapValues (_.toString))
         //----------------------统计联网状态----------------------
-        //----------------------统计系统语言----------------------
+        val oldNetMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(SourceData.getFamilyMap("net_status".getBytes)).foreach(_ forEach ((k, v) => oldNetMap += ((new String(k), new String(v).toInt))))
+        val oldNetData = oldNetMap.toMap
+        val newNetData = aiv._2.map(x => (x.net_status, 1)).groupBy(_._1).map { case (k, v) => (k, v.map(_._2).sum) }
+        HbaseBean.insertBatchRecord(AIV_TABLE, aiv._1, "net_status", oldNetData./:(newNetData) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        } mapValues (_.toString))
         //---------------------统计运营商类型---------------------
+        val oldISPMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(SourceData.getFamilyMap("ISP".getBytes)).foreach(_ forEach ((k, v) => oldISPMap += ((new String(k), new String(v).toInt))))
+        val oldISPData = oldISPMap.toMap
+        val newISPData = aiv._2.map(x => (x.ISP, 1)).groupBy(_._1).map { case (k, v) => (k, v.map(_._2).sum) }
+        HbaseBean.insertBatchRecord(AIV_TABLE, aiv._1, "ISP", oldISPData./:(newISPData) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        } mapValues (_.toString))
       }
 
     }
@@ -209,7 +230,7 @@ object LocalStream {
         Option(oldSource.getFamilyMap("click_num".getBytes)).foreach(_ forEach ((k, v) => oldDurationMap += ((new String(k), new String(v).toLong))))
         val oldDurationData = oldDurationMap.toMap
         HbaseBean.insertBatchRecord(SINGLE_APP, app._1, "duration", oldDurationData./:(app._2) {
-          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0L)))
         }.mapValues(_.toString))
       }
     }
@@ -283,8 +304,17 @@ object LocalStream {
       }
     }
 
-    //------------------------
+    /** ********************计算单一用户的应用量 *************************/
+    val SINGLE_USER_PHONE_USEAE_DURATION = data.map(x => (x.user_id, x.apps.map(y => y.endTime - y.beginTime).sum))
 
+    // 存入用户每日使用手机时长到Hbase
+    SINGLE_USER_PHONE_USEAE_DURATION.foreachRDD { rdd =>
+      rdd.foreach { user =>
+        HbaseBean.insertRecord(USER, user._1, "phone_usage", user._1, user._2.toString)
+      }
+    }
+
+    
     ssc.start
     ssc.awaitTermination
   }

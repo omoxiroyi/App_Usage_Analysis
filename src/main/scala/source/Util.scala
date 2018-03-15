@@ -8,7 +8,6 @@ import play.api.libs.json.{Json, OFormat}
 
 
 object Util {
-
   private val url = "jdbc:mysql://localhost:3306/phonedata?useSSL=false&characterEncoding=utf-8"
   private val username = "root"
   private val password = "199729"
@@ -20,6 +19,12 @@ object Util {
   case class SystemVersion(version: String, count: Int)
 
   case class Language(language: String, count: Int)
+
+  case class ISP(name: String, count: Int)
+
+  case class Resolution(resolution: String, count: Int)
+
+  case class NetStatus(name: String, count: Int)
 
   lazy val AppSample: RowParser[App] = get[String]("app_name") ~
     get[String]("package_name") ~
@@ -39,6 +44,18 @@ object Util {
 
   lazy val languageSample: RowParser[Language] = get[String]("language") ~ get[Int]("count") map {
     case language ~ count => Language(language, count)
+  }
+
+  lazy val ISPSample: RowParser[ISP] = get[String]("name") ~ get[Int]("count") map {
+    case name ~ count => ISP(name, count)
+  }
+
+  lazy val ResolutionSample: RowParser[Resolution] = get[String]("resolution") ~ get[Int]("count") map {
+    case resolution ~ count => Resolution(resolution, count)
+  }
+
+  lazy val NetStatusSample: RowParser[NetStatus] = get[String]("name") ~ get[Int]("count") map {
+    case net_status ~ count => NetStatus(net_status, count)
   }
 
   implicit lazy val conn: Connection = DriverManager.getConnection(url, username, password)

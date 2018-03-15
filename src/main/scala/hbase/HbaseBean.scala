@@ -47,7 +47,6 @@ object HbaseBean {
     data foreach { case (k, v) => put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(k), Bytes.toBytes(v)) }
     table.put(put)
     table.close()
-    println(s"$tableName insert batch successfully..")
   }
 
   def insertRecord(tableName: String, rowKey: String, columnFamily: String, qualifier: String, value: String): Unit = {
@@ -56,7 +55,6 @@ object HbaseBean {
     put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(qualifier), Bytes.toBytes(value))
     table.put(put)
     table.close()
-    println(s"$tableName insert data successfully..")
   }
 
   def getOneRecord(tableName: String, rowKey: String): Result = {
@@ -87,12 +85,15 @@ object HbaseBean {
   }
 
   def main(args: Array[String]): Unit = {
-    //createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
-    //createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
-    //createTable("APP_VERSION", "click_num")
-    //createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
-    //dropTable("SINGLE_APP")
-    //dropTable("APP_VERSION")
-    //getAll("APP_USAGE")
+    //    createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
+    //    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
+    //    createTable("APP_VERSION", "click_num")
+    //    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
+    createTable("USER", "phone_usage")
+    //    dropTable("AIV")
+    //    dropTable("APP_VERSION")
+    //    dropTable("APP_USAGE")
+    //    dropTable("SINGLE_APP")
+    getAll("AIV")
   }
 }
