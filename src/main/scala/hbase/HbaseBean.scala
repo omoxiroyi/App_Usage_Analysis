@@ -1,5 +1,7 @@
 package hbase
 
+import java.util.concurrent.{ExecutorService, Executors}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client._
@@ -11,7 +13,9 @@ object HbaseBean {
   conf.set("hbase.rootdir", "hdfs://master:8020/hbase")
   conf.set("hbase.zookeeper.quorum", "master,slave1")
 
-  val connection: Connection = ConnectionFactory.createConnection(conf)
+  val executor: ExecutorService = Executors.newFixedThreadPool(64)
+
+  val connection: Connection = ConnectionFactory.createConnection(conf, executor)
 
   val admin: Admin = connection.getAdmin
 
@@ -89,11 +93,11 @@ object HbaseBean {
     //    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
     //    createTable("APP_VERSION", "click_num")
     //    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
-    createTable("USER", "phone_usage")
+    //    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby")
     //    dropTable("AIV")
     //    dropTable("APP_VERSION")
     //    dropTable("APP_USAGE")
     //    dropTable("SINGLE_APP")
-    getAll("AIV")
+    getAll("SINGLE_APP")
   }
 }

@@ -12,7 +12,7 @@ object Util {
   private val username = "root"
   private val password = "199729"
 
-  case class App(app_name: String, package_name: String, count: Int)
+  case class App(app_name: String, package_name: String, count: Int, kind: String)
 
   case class BrandModel(brand: String, model: String, count: Int)
 
@@ -26,10 +26,13 @@ object Util {
 
   case class NetStatus(name: String, count: Int)
 
+  case class User(uid: String, province: String, city: String)
+
   lazy val AppSample: RowParser[App] = get[String]("app_name") ~
     get[String]("package_name") ~
-    get[Int]("count") map {
-    case app_name ~ package_name ~ count => App(app_name, package_name, count)
+    get[Int]("count") ~
+    get[String]("kind") map {
+    case app_name ~ package_name ~ count ~ kind => App(app_name, package_name, count, kind)
   }
 
   lazy val BrandModelSample: RowParser[BrandModel] = get[String]("brand") ~
@@ -56,6 +59,10 @@ object Util {
 
   lazy val NetStatusSample: RowParser[NetStatus] = get[String]("name") ~ get[Int]("count") map {
     case net_status ~ count => NetStatus(net_status, count)
+  }
+
+  lazy val UserSample: RowParser[User] = get[String]("id") ~ get[String]("province") ~ get[String]("city") map {
+    case id ~ province ~ city => User(id, province, city)
   }
 
   implicit lazy val conn: Connection = DriverManager.getConnection(url, username, password)

@@ -26,6 +26,7 @@ dependencies {
     compile group: 'org.apache.spark', name: 'spark-streaming-kafka-0-10_2.11', version: '2.2.1'
     compile group: 'mysql', name: 'mysql-connector-java', version: '5.1.45'
     compile group: 'com.typesafe.play', name: 'anorm_2.11', version: '2.5.3'
+    compile group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.1.10'
 }
 
 configurations.all {

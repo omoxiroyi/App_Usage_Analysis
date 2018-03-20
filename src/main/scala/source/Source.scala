@@ -5,7 +5,6 @@ import java.net.ServerSocket
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import anorm.SqlParser.scalar
 import anorm._
 import play.api.libs.json.Json
 import source.Util._
@@ -16,11 +15,11 @@ import scala.util.Random
 
 object Source {
   def main(args: Array[String]): Unit = {
-    val apps = SQL("select * from app").as(AppSample *)
+    val apps = SQL("select * from temp").as(AppSample *)
     val brands = SQL("select * from brand_model").as(BrandModelSample *)
     val systemVersions = SQL("select * from system_version").as(systemVersionSample *)
     val languages = SQL("select * from language").as(languageSample *)
-    val ids = SQL("select * from user_id").as(scalar[String] *)
+    val users = SQL("select * from user_id").as(UserSample *)
     val ISPs = SQL("select * from ISP").as(ISPSample *)
     val resolutions = SQL("select * from resolution").as(ResolutionSample *)
     val net_status = SQL("select * from net_status").as(NetStatusSample *)
@@ -37,7 +36,8 @@ object Source {
       today.add(Calendar.DAY_OF_MONTH, -1)
       1 to 100 foreach { _ =>
         val brand_model = getRandomBrand(brands)
-        val data = DataBean(getRandomUID(ids), date, getRandomAppUsage(apps), brand_model._1, brand_model._2, getRandomLanguage(languages), getRandomSystemVersion(systemVersions), getRandomResolution(resolutions), getRandomNetStatus(net_status), getRandomISP(ISPs))
+        val user = getRandomUser(users)
+        val data = DataBean(user.uid, user.province, user.city, date, getRandomAppUsage(apps), brand_model._1, brand_model._2, getRandomLanguage(languages), getRandomSystemVersion(systemVersions), getRandomResolution(resolutions), getRandomNetStatus(net_status), getRandomISP(ISPs))
         out.println(Json.toJson(data))
       }
       out.flush()
@@ -99,18 +99,6 @@ object Source {
     (brand, model)
   }
 
-  def getRandomApp(apps: List[App], n: Int): IndexedSeq[Apps] = {
-    var cnt = 0
-    val weight = apps.map { x =>
-      cnt = cnt + x.count
-      (x.app_name, x.package_name, cnt)
-    }
-    (1 to n).map { _ =>
-      val rand = Random.nextInt(cnt) + 1
-      weight.find(_._3 >= rand).map(x => Apps(x._1, x._2)).get
-    }
-  }
-
   def getRandomSystemVersion(systemVersions: List[SystemVersion]): String = {
     var cnt = 0
     val weight = systemVersions.map { x =>
@@ -131,7 +119,7 @@ object Source {
     weight.find(_._2 >= rand).map(_._1).get
   }
 
-  def getRandomUID(ids: List[String]): String = ids(Random.nextInt(ids.length))
+  def getRandomUser(users: List[User]): User = users(Random.nextInt(users.length))
 
   def getRandomAppUsage(apps: List[App]): List[AppUsage] = {
     val date = Calendar.getInstance
@@ -147,7 +135,7 @@ object Source {
     var cnt = 0
     val weight = apps.map { x =>
       cnt = cnt + x.count
-      (x.app_name, x.package_name, cnt)
+      (x.app_name, x.package_name, x.kind, cnt)
     }
 
     val buffer = ListBuffer[AppUsage]()
@@ -165,13 +153,13 @@ object Source {
       val randTime = Random.nextInt(3000000) + 5000
       if (ifUse == 0) {
         val rand = Random.nextInt(cnt) + 1
-        val app = weight.find(_._3 >= rand).map(x => Apps(x._1, x._2)).get
+        val app = weight.find(_._4 >= rand).map(x => (x._1, x._2, x._3)).get
 
         val r = Random.nextInt(c) + 1
 
         val version = w.find(_._2 >= r).map(_._1).get
 
-        buffer += AppUsage(app.package_name, current, current + randTime, version)
+        buffer += AppUsage(app._2, current, current + randTime, version, app._3)
       }
       current = current + randTime
     }
