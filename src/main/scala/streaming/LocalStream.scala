@@ -18,6 +18,7 @@ object LocalStream {
     val APP_VERSION: String = "APP_VERSION"
     val APP_USAGE: String = "APP_USAGE"
     val USER: String = "USER"
+    val USER_GROUP = "USER_GROUP"
 
     ssc.checkpoint("hdfs://master:8020/checkpoint")
 
@@ -26,7 +27,9 @@ object LocalStream {
     //源数据DataBean还原 从Json转化为scala对象
     val data = input.flatMap(Json.parse(_).asOpt[DataBean])
 
-    /** ********************计算应用无关变量 *************************/
+    /** ********************************************************************************/
+    /** *******************************计算应用无关变量 *********************************/
+    /** ********************************************************************************/
 
     //累计五分钟存储一次应用无关变量数据 app irrelevant variables
     val AIV = data.window(Seconds(20), Seconds(20))
@@ -95,8 +98,9 @@ object LocalStream {
 
     }
 
-    /** ********************计算单一应用量 *************************/
-
+    /** ********************************************************************************/
+    /** ******************************计算单一app应用量 *********************************/
+    /** ********************************************************************************/
     // --------------------------统计app每日启动数--------------------------------
 
     // 格式化数据为每个用户某一天的打开的某个应用的次数 (k, (v._1, v._2)) => k -> 应用的包名 v._1 -> 日期 v._2 -> 应用打开的次数
@@ -124,14 +128,20 @@ object LocalStream {
     }
 
     // --------------------------统计app每日启动人数-------------------------------
+
+    // 单个用户每日的app使用状况
+    // [package_name: xx, date: 2018-3-10, uid: xx]
     val SINGLE_USER_DAYLY_APP_USAGE = AIV.flatMap(x => x.apps.map(_.package_name).distinct.map(y => (y, x.date, x.user_id)))
 
+    // 单个app每日的用户列表
+    // [package_name: xx, [date: 2018-3-10, [uid: xx, uid: zz]]]
     val ALL_USER_DAYLY_APP_USAGE = SINGLE_USER_DAYLY_APP_USAGE.transform(_.groupBy(_._1)).map {
       case (k, v) => k -> v.groupBy(_._2).map {
         case (kk, vv) => kk -> vv.map(_._3).toList.distinct
       }
     }
 
+    // 存储app的每日用户
     ALL_USER_DAYLY_APP_USAGE.foreachRDD { rdd =>
       rdd.foreach { app =>
         val oldSource = HbaseBean.getOneRecord(SINGLE_APP, app._1)
@@ -143,6 +153,11 @@ object LocalStream {
         }.mapValues(_.mkString(",")))
       }
     }
+
+
+    //--------------------------统计app用户的保留率-------------------------------
+
+
 
     // Todo 待改善
     // --------------------------统计app版本应用量--------------------------------
@@ -227,7 +242,7 @@ object LocalStream {
       rdd.foreach { app =>
         val oldSource = HbaseBean.getOneRecord(SINGLE_APP, app._1)
         val oldDurationMap = scala.collection.mutable.HashMap[String, Long]()
-        Option(oldSource.getFamilyMap("click_num".getBytes)).foreach(_ forEach ((k, v) => oldDurationMap += ((new String(k), new String(v).toLong))))
+        Option(oldSource.getFamilyMap("duration".getBytes)).foreach(_ forEach ((k, v) => oldDurationMap += ((new String(k), new String(v).toLong))))
         val oldDurationData = oldDurationMap.toMap
         HbaseBean.insertBatchRecord(SINGLE_APP, app._1, "duration", oldDurationData./:(app._2) {
           case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0L)))
@@ -304,7 +319,11 @@ object LocalStream {
       }
     }
 
-    /** ********************计算单一用户的应用量 *************************/
+
+    /** ********************************************************************************/
+    /** *****************************计算单一用户的应用量 *******************************/
+    /** ********************************************************************************/
+
     // 某一用户每天玩手机的总时长
     val SINGLE_USER_PHONE_USAGE_DURATION = data.map(x => (x.user_id, x.date, x.apps.map(y => y.endTime - y.beginTime).sum))
 
@@ -325,6 +344,7 @@ object LocalStream {
     }
 
     // 某一用户每日的应用历史记录
+    // [uid: xx, [package_name: xx, beginTime: xx]]
     val SOMEONE_DAYLY_HISTORY = data.map(x => (x.user_id, x.date, x.apps.map(y => (y.package_name, y.beginTime))))
 
     SOMEONE_DAYLY_HISTORY.foreachRDD { rdd =>
@@ -334,6 +354,7 @@ object LocalStream {
     }
 
     // 某一用户的兴趣爱好
+    // [uid: xx, [hobby: xx, count: 5]]
     val SOMEONE_HIS_HOBBY = data.map(x => (x.user_id, x.apps.map(y => (y.kind, 1)).groupBy(_._1).mapValues(_.map(_._2).sum)))
 
     SOMEONE_HIS_HOBBY.foreachRDD { rdd =>
@@ -348,16 +369,60 @@ object LocalStream {
       }
     }
 
-    /** *********************分析用户群体的的应用量(面向所有app) *************************/
+    /** ********************************************************************************/
+    /** **********************分析用户群体的的应用量(面向所有app) *************************/
+    /** ********************************************************************************/
 
+    //---------------------------统计用户群体的兴趣分布-------------------------------
     // todo 暂定 按照日期或不按日期
     // 用户兴趣分布
     val USER_GROUP_HOBBY = data.flatMap(x => x.apps.map(y => (y.kind, 1))).reduceByKey(_ + _)
 
+    //---------------------------统计用户群体的地理位置分布----------------------------
     // 用户按照省份分布
     val USER_GROUP_LOCATION = data.map(x => x.province -> 1).reduceByKey(_ + _)
 
-    
+    //------------------------统计用户群体的每日使用手机时长分布------------------------
+
+    // 单用户每日使用手机时长
+    // [date: 2018-3-10, duration: 50000]
+    val ONE_USER_DAYLY_DURATION = data.map(x => x.date -> x.apps.map(y => y.endTime - y.beginTime).sum)
+
+    // 单用户每日使用手机时长类别
+    // [date: 2018-3-10, kind: 1]
+    val ONE_USER_DAYLY_DURATION_MAP = ONE_USER_DAYLY_DURATION.map(x => x._1 -> x._2).map {
+      case (k, v) if v >= 0 && v < 300 => (k, "1")
+      case (k, v) if v >= 300 && v < 900 => (k, "2")
+      case (k, v) if v >= 900 && v < 1800 => (k, "3")
+      case (k, v) if v >= 1800 && v < 3600 => (k, "4")
+      case (k, v) if v >= 3600 && v < 7200 => (k, "5")
+      case (k, _) => (k, "6")
+    }
+
+    // 多用户多日期手机使用时长类别
+    // [date: 2018-3-10, [kind: 1, count: 5]]
+    val USER_GROUP_DAYLY_USAGE = ONE_USER_DAYLY_DURATION_MAP.groupByKey.map {
+      case (k, v) => k -> v.map(_ -> 1).groupBy(_._1).mapValues(_.map(_._2).sum)
+    }
+
+    // 存入用户群体使用时长类别
+    USER_GROUP_DAYLY_USAGE.foreachRDD { rdd =>
+      rdd.foreach { day =>
+        val oldSource = HbaseBean.getOneRecord(USER_GROUP, day._1)
+        val oldUsageMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(oldSource.getFamilyMap("usage".getBytes)).foreach(_ forEach ((k, v) => oldUsageMap += ((new String(k), new String(v).toInt))))
+        val oldUsageData = oldUsageMap.toMap
+        HbaseBean.insertBatchRecord(USER_GROUP, day._1, "usage", oldUsageData./:(day._2) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        }.mapValues(_.toString))
+      }
+    }
+
+    /** ********************************************************************************/
+    /** **********************分析多个app的的应用量(面向所有app) *************************/
+    /** ********************************************************************************/
+
+
     ssc.start
     ssc.awaitTermination
   }

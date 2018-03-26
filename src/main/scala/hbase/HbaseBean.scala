@@ -94,10 +94,12 @@ object HbaseBean {
     //    createTable("APP_VERSION", "click_num")
     //    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
     //    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby")
+    //    createTable("USER_GROUP", "usage")
     //    dropTable("AIV")
     //    dropTable("APP_VERSION")
     //    dropTable("APP_USAGE")
     //    dropTable("SINGLE_APP")
+    //    dropTable("USER")
     getAll("SINGLE_APP")
   }
 }

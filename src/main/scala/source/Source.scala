@@ -24,6 +24,9 @@ object Source {
     val resolutions = SQL("select * from resolution").as(ResolutionSample *)
     val net_status = SQL("select * from net_status").as(NetStatusSample *)
     val today = Calendar.getInstance
+    today.set(Calendar.YEAR, 2016)
+    today.set(Calendar.MONTH, 5)
+    today.set(Calendar.DAY_OF_MONTH, 1)
     val formatter = new SimpleDateFormat("yyyy-MM-dd")
 
     val serverSocket = new ServerSocket(9999)
@@ -33,15 +36,15 @@ object Source {
 
     while (true) {
       val date = formatter.format(today.getTime)
-      today.add(Calendar.DAY_OF_MONTH, -1)
-      1 to 100 foreach { _ =>
+      today.add(Calendar.DAY_OF_MONTH, 1)
+      1 to 1000 foreach { _ =>
         val brand_model = getRandomBrand(brands)
         val user = getRandomUser(users)
         val data = DataBean(user.uid, user.province, user.city, date, getRandomAppUsage(apps), brand_model._1, brand_model._2, getRandomLanguage(languages), getRandomSystemVersion(systemVersions), getRandomResolution(resolutions), getRandomNetStatus(net_status), getRandomISP(ISPs))
         out.println(Json.toJson(data))
       }
       out.flush()
-      Thread.sleep(1000) //*5
+      Thread.sleep(2000) //*5
     }
   }
 
