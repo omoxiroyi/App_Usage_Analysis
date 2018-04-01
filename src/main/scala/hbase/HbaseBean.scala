@@ -1,7 +1,5 @@
 package hbase
 
-import java.util.concurrent.{ExecutorService, Executors}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client._
@@ -13,9 +11,9 @@ object HbaseBean {
   conf.set("hbase.rootdir", "hdfs://master:8020/hbase")
   conf.set("hbase.zookeeper.quorum", "master,slave1")
 
-  val executor: ExecutorService = Executors.newFixedThreadPool(64)
+  //val executor: ExecutorService = Executors.newFixedThreadPool(600)
 
-  val connection: Connection = ConnectionFactory.createConnection(conf, executor)
+  val connection: Connection = ConnectionFactory.createConnection(conf)
 
   val admin: Admin = connection.getAdmin
 
@@ -89,17 +87,18 @@ object HbaseBean {
   }
 
   def main(args: Array[String]): Unit = {
-    //    createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
-    //    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
-    //    createTable("APP_VERSION", "click_num")
-    //    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
-    //    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby")
-    //    createTable("USER_GROUP", "usage")
-    //    dropTable("AIV")
-    //    dropTable("APP_VERSION")
-    //    dropTable("APP_USAGE")
-    //    dropTable("SINGLE_APP")
-    //    dropTable("USER")
-    getAll("SINGLE_APP")
+    createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
+    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
+    createTable("APP_VERSION", "click_num")
+    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
+    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby", "usage_times")
+    createTable("USER_GROUP", "usage", "hobby", "location", "period")
+    //    getAll("USER_GROUP")
+    //        dropTable("AIV")
+    //        dropTable("APP_VERSION")
+    //        dropTable("APP_USAGE")
+    //        dropTable("SINGLE_APP")
+    //        dropTable("USER")
+    //        dropTable("USER_GROUP")
   }
 }

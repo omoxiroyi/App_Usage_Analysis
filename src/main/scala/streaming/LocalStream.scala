@@ -10,8 +10,8 @@ import streaming.Util._
 
 object LocalStream {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LocalStream").setMaster("local[8]")
-    val ssc = new StreamingContext(conf, Seconds(5))
+    val conf = new SparkConf().setAppName("Analysis")
+    val ssc = new StreamingContext(conf, Seconds(60))
 
     val AIV_TABLE: String = "AIV"
     val SINGLE_APP: String = "SINGLE_APP"
@@ -32,7 +32,7 @@ object LocalStream {
     /** ********************************************************************************/
 
     //累计五分钟存储一次应用无关变量数据 app irrelevant variables
-    val AIV = data.window(Seconds(20), Seconds(20))
+    val AIV = data //.window(Seconds(10), Seconds(10))
 
     //将数据按不同日期分类
     val DateSplitAIV = AIV.transform(rdd => rdd.groupBy(_.date))
@@ -113,6 +113,7 @@ object LocalStream {
 
     // 存储数据入Hbase
     ALL_USER_DAYLY_DATA.foreachRDD { rdd =>
+      // Todo 性能问题
       rdd.foreach { app =>
         // 查询该App的原数据 rowKey为该app的包名
         val oldSource = HbaseBean.getOneRecord(SINGLE_APP, app._1)
@@ -142,6 +143,7 @@ object LocalStream {
     }
 
     // 存储app的每日用户
+    // Todo 性能问题
     ALL_USER_DAYLY_APP_USAGE.foreachRDD { rdd =>
       rdd.foreach { app =>
         val oldSource = HbaseBean.getOneRecord(SINGLE_APP, app._1)
@@ -153,10 +155,6 @@ object LocalStream {
         }.mapValues(_.mkString(",")))
       }
     }
-
-
-    //--------------------------统计app用户的保留率-------------------------------
-
 
 
     // Todo 待改善
@@ -183,6 +181,7 @@ object LocalStream {
       }))
     }
 
+    // Todo 存在严重性能问题
     // 存储app版本应用量到Hbase
     ALL_APP_VERSION.foreachRDD { rdd =>
       rdd.foreach { app =>
@@ -250,6 +249,7 @@ object LocalStream {
       }
     }
 
+    // Todo 存在性能问题
     // 写入单一APP使用时长情况分布到Hbase
     ALL_USER_APP_USAGE_DISTRIBUTION.foreachRDD { rdd =>
       rdd.foreach { app =>
@@ -343,8 +343,18 @@ object LocalStream {
       }
     }
 
+    // 某一用户日常使用app的次数的统计
+    val SOMEONE_DAYLY_USAGE_TIMES = data.map(x => (x.user_id, x.date, x.apps.length))
+
+    // 存储某一用户日常使用app的次数
+    SOMEONE_DAYLY_USAGE_TIMES.foreachRDD { rdd =>
+      rdd.foreach { app =>
+        HbaseBean.insertRecord(USER, app._1, "usage_times", app._2, app._3.toString)
+      }
+    }
+
     // 某一用户每日的应用历史记录
-    // [uid: xx, [package_name: xx, beginTime: xx]]
+    // [uid: xx, date: 2018-3-10, [package_name: xx, beginTime: xx]]
     val SOMEONE_DAYLY_HISTORY = data.map(x => (x.user_id, x.date, x.apps.map(y => (y.package_name, y.beginTime))))
 
     SOMEONE_DAYLY_HISTORY.foreachRDD { rdd =>
@@ -357,6 +367,7 @@ object LocalStream {
     // [uid: xx, [hobby: xx, count: 5]]
     val SOMEONE_HIS_HOBBY = data.map(x => (x.user_id, x.apps.map(y => (y.kind, 1)).groupBy(_._1).mapValues(_.map(_._2).sum)))
 
+    // Todo 存在性能问题
     SOMEONE_HIS_HOBBY.foreachRDD { rdd =>
       rdd.foreach { user =>
         val oldSource = HbaseBean.getOneRecord(USER, user._1)
@@ -374,13 +385,45 @@ object LocalStream {
     /** ********************************************************************************/
 
     //---------------------------统计用户群体的兴趣分布-------------------------------
-    // todo 暂定 按照日期或不按日期
-    // 用户兴趣分布
-    val USER_GROUP_HOBBY = data.flatMap(x => x.apps.map(y => (y.kind, 1))).reduceByKey(_ + _)
+    // 个人用户兴趣分布 按照日期
+    // [date: 2018-3-10, [hobby: xx, count: 5]]
+    val SINGLE_USER_HOBBY = data.map(x => (x.date, x.apps.map(y => (y.kind, 1)).groupBy(_._1).mapValues(_.map(_._2).sum)))
+
+    // 群体用户兴趣分布 按照日期
+    // [date: 2018-3-10, [hobby: xx, count: 5]]
+    val USER_GROUP_HOBBY = SINGLE_USER_HOBBY.reduceByKey(_./:(_) {
+      case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+    })
+
+    // 存储用户兴趣分布到Hbase
+    USER_GROUP_HOBBY.foreachRDD { rdd =>
+      rdd.foreach { piece =>
+        val oldSource = HbaseBean.getOneRecord(USER_GROUP, piece._1)
+        val oldHobbyMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(oldSource.getFamilyMap("hobby".getBytes)).foreach(_ forEach ((k, v) => oldHobbyMap += ((new String(k), new String(v).toInt))))
+        val oldHobbyData = oldHobbyMap.toMap
+        HbaseBean.insertBatchRecord(USER_GROUP, piece._1, "hobby", oldHobbyData./:(piece._2) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        } mapValues (_.toString))
+      }
+    }
 
     //---------------------------统计用户群体的地理位置分布----------------------------
     // 用户按照省份分布
-    val USER_GROUP_LOCATION = data.map(x => x.province -> 1).reduceByKey(_ + _)
+    // [date: 2018-3-10, [province: "湖南", count: 12人]]
+    val USER_GROUP_LOCATION = data.map(x => (x.date, x.province, 1)).transform(_.groupBy(_._1)).mapValues(_.groupBy(_._2).mapValues(_.map(_._3).sum))
+
+    USER_GROUP_LOCATION.foreachRDD { rdd =>
+      rdd.foreach { location =>
+        val oldSource = HbaseBean.getOneRecord(USER_GROUP, location._1)
+        val oldHobbyMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(oldSource.getFamilyMap("location".getBytes)).foreach(_ forEach ((k, v) => oldHobbyMap += ((new String(k), new String(v).toInt))))
+        val oldHobbyData = oldHobbyMap.toMap
+        HbaseBean.insertBatchRecord(USER_GROUP, location._1, "location", oldHobbyData./:(location._2) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        } mapValues (_.toString))
+      }
+    }
 
     //------------------------统计用户群体的每日使用手机时长分布------------------------
 
@@ -413,6 +456,34 @@ object LocalStream {
         Option(oldSource.getFamilyMap("usage".getBytes)).foreach(_ forEach ((k, v) => oldUsageMap += ((new String(k), new String(v).toInt))))
         val oldUsageData = oldUsageMap.toMap
         HbaseBean.insertBatchRecord(USER_GROUP, day._1, "usage", oldUsageData./:(day._2) {
+          case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+        }.mapValues(_.toString))
+      }
+    }
+
+    //------------------------统计用户群体的每日使用手机使用时间分布-----------------------
+
+    // 单人
+    // [date: xx, [period: 11, count: 5]]
+    val SINGLE_USER_DAYLY_PERIOD = data.map(x => (x.date, x.apps.map(_.beginTime).map { time =>
+      val c = Calendar.getInstance()
+      c.setTimeInMillis(time)
+      (c.get(Calendar.HOUR_OF_DAY).toString, 1)
+    }.groupBy(_._1).mapValues(_.map(_._2).sum)))
+
+    // 群体
+    // [date: xx, [period: 11, count: 5]]
+    val USER_GROUP_DAYLY_PERIOD = SINGLE_USER_DAYLY_PERIOD.reduceByKey(_./:(_) {
+      case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
+    })
+
+    USER_GROUP_DAYLY_PERIOD.foreachRDD { rdd =>
+      rdd.foreach { piece =>
+        val oldSource = HbaseBean.getOneRecord(USER_GROUP, piece._1)
+        val oldUsageMap = scala.collection.mutable.HashMap[String, Int]()
+        Option(oldSource.getFamilyMap("period".getBytes)).foreach(_ forEach ((k, v) => oldUsageMap += ((new String(k), new String(v).toInt))))
+        val oldUsageData = oldUsageMap.toMap
+        HbaseBean.insertBatchRecord(USER_GROUP, piece._1, "period", oldUsageData./:(piece._2) {
           case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
         }.mapValues(_.toString))
       }

@@ -8,7 +8,7 @@ import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 object Streaming extends App {
-  val conf = new SparkConf().setAppName("Streaming")
+  val conf = new SparkConf().setAppName("Streaming").setMaster("local[8]")
 
   val ssc = new StreamingContext(conf, Seconds(5))
 
