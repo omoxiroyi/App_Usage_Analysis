@@ -9,7 +9,7 @@ object gg {
 
     val sc = new SparkContext(conf)
 
-    val n = 10000000L
+    val n = 100000000L
 
     val t = sc.parallelize(1L to n).map { _ =>
       val x = random * 2 - 1

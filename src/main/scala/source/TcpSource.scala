@@ -15,7 +15,6 @@ object TcpSource extends App {
     Future {
       val out = new PrintWriter(socket.getOutputStream)
       while (true) {
-
         out.println("This is a test message")
         out.flush()
         Thread.sleep(1000)

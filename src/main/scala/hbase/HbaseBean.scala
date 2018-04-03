@@ -11,9 +11,9 @@ object HbaseBean {
   conf.set("hbase.rootdir", "hdfs://master:8020/hbase")
   conf.set("hbase.zookeeper.quorum", "master,slave1")
 
-  //val executor: ExecutorService = Executors.newFixedThreadPool(600)
+  //val executor: ExecutorService = Executors.newFixedThreadPool(5000)
 
-  val connection: Connection = ConnectionFactory.createConnection(conf)
+  implicit val connection: Connection = ConnectionFactory.createConnection(conf)
 
   val admin: Admin = connection.getAdmin
 
@@ -43,7 +43,7 @@ object HbaseBean {
     }
   }
 
-  def insertBatchRecord(tableName: String, rowKey: String, columnFamily: String, data: Map[String, String]): Unit = {
+  def insertBatchRecord(tableName: String, rowKey: String, columnFamily: String, data: Map[String, String])(implicit connection: Connection): Unit = {
     val table = connection.getTable(TableName.valueOf(tableName))
     val put = new Put(rowKey.getBytes)
     data foreach { case (k, v) => put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(k), Bytes.toBytes(v)) }
@@ -51,7 +51,7 @@ object HbaseBean {
     table.close()
   }
 
-  def insertRecord(tableName: String, rowKey: String, columnFamily: String, qualifier: String, value: String): Unit = {
+  def insertRecord(tableName: String, rowKey: String, columnFamily: String, qualifier: String, value: String)(implicit connection: Connection): Unit = {
     val table = connection.getTable(TableName.valueOf(tableName))
     val put = new Put(rowKey.getBytes)
     put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(qualifier), Bytes.toBytes(value))
@@ -59,7 +59,14 @@ object HbaseBean {
     table.close()
   }
 
-  def getOneRecord(tableName: String, rowKey: String): Result = {
+  def getNewConnection: Connection = {
+    val hbaseConf = HBaseConfiguration.create
+    hbaseConf.set("hbase.rootdir", "hdfs://master:8020/hbase")
+    hbaseConf.set("hbase.zookeeper.quorum", "master,slave1")
+    ConnectionFactory.createConnection(hbaseConf)
+  }
+
+  def getOneRecord(tableName: String, rowKey: String)(implicit connection: Connection): Result = {
     val table = connection.getTable(TableName.valueOf(tableName))
     val get = new Get(rowKey.getBytes)
     val rs = table.get(get)
@@ -87,18 +94,20 @@ object HbaseBean {
   }
 
   def main(args: Array[String]): Unit = {
-    createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
-    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
-    createTable("APP_VERSION", "click_num")
-    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
-    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby", "usage_times")
-    createTable("USER_GROUP", "usage", "hobby", "location", "period")
-    //    getAll("USER_GROUP")
-    //        dropTable("AIV")
-    //        dropTable("APP_VERSION")
-    //        dropTable("APP_USAGE")
-    //        dropTable("SINGLE_APP")
-    //        dropTable("USER")
-    //        dropTable("USER_GROUP")
+    //    createTable("AIV", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
+    //    createTable("SINGLE_APP", "click_num", "version", "day_period", "week_period", "user", "duration")
+    //    createTable("APP_VERSION", "click_num")
+    //    createTable("APP_USAGE", "1", "2", "3", "4", "5", "6")
+    //    createTable("USER", "usage_duration", "usage_statistics", "usage_history", "hobby", "usage_times")
+    //    createTable("USER_GROUP", "usage", "hobby", "location", "period")
+    //getAll("USER_GROUP")
+    //    dropTable("AIV")
+    //    dropTable("APP_VERSION")
+    //    dropTable("APP_USAGE")
+    //    dropTable("SINGLE_APP")
+    //    dropTable("USER")
+    //    dropTable("USER_GROUP")
+
+    createTable("Test1", "brand", "model", "system_version", "resolution", "net_status", "language", "ISP")
   }
 }

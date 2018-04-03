@@ -7,11 +7,12 @@ import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import play.api.libs.json.Json
 import streaming.Util._
+import HbaseBean._
 
 object LocalStream {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Analysis")
-    val ssc = new StreamingContext(conf, Seconds(60))
+    val ssc = new StreamingContext(conf, Seconds(20))
 
     val AIV_TABLE: String = "AIV"
     val SINGLE_APP: String = "SINGLE_APP"
@@ -95,7 +96,6 @@ object LocalStream {
           case (m, (k, v)) => m + (k -> (v + m.getOrElse(k, 0)))
         } mapValues (_.toString))
       }
-
     }
 
     /** ********************************************************************************/
